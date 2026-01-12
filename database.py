@@ -42,3 +42,24 @@ def add_stat(user_id: int):
 def total_downloads():
     cur.execute("SELECT COUNT(*) FROM stats")
     return cur.fetchone()[0]
+
+def set_channel(channel: str):
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)"
+    )
+    cur.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES ('channel', ?)",
+        (channel,)
+    )
+    conn.commit()
+
+
+def get_channel():
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)"
+    )
+    cur.execute(
+        "SELECT value FROM settings WHERE key='channel'"
+    )
+    row = cur.fetchone()
+    return row[0] if row else None
