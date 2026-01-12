@@ -11,6 +11,7 @@ from downloader import download_video
 from access import has_access
 from payments import stars_invoice
 from database import set_paid, add_stat, total_downloads
+from database import set_channel, get_channel
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,6 +47,24 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📊 Total downloads: {total_downloads()}"
     )
 
+async def setchannel(update, context):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    if not context.args:
+        await update.message.reply_text("Используй: /setchannel @channel")
+        return
+
+    channel = context.args[0]
+    set_channel(channel)
+    await update.message.reply_text(f"✅ Канал установлен: {channel}")
+
+async def getchannel(update, context):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+
+    ch = get_channel()
+    await update.message.reply_text(f"Текущий канал: {ch}")
 
 async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await has_access(update, context):
@@ -83,6 +102,8 @@ def main():
     app.add_handler(PreCheckoutQueryHandler(precheckout))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
+    app.add_handler(CommandHandler("setchannel", setchannel))
+    app.add_handler(CommandHandler("getchannel", getchannel))
 
     print("✅ Bot started")
     app.run_polling()
