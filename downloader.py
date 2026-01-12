@@ -11,32 +11,31 @@ def download_video(url: str):
     filepath = os.path.join(DOWNLOAD_DIR, filename)
 
     ydl_opts = {
-        # Лучшее видео + аудио, без экспериментов
-        "format": "bestvideo+bestaudio/best",
+        # 🔥 Главное: fallback-цепочка, НИКАКИХ "="
+        "format": (
+            "bv*[ext=mp4][height<=1080]/"
+            "bv*[ext=mp4][height<=720]/"
+            "bv*[ext=mp4][height<=480]/"
+            "best[ext=mp4]/best"
+        ),
 
         "outtmpl": filepath,
         "merge_output_format": "mp4",
 
-        # ВАЖНО: cookies реально используются
+        # ✅ cookies реально используются
         "cookiefile": COOKIES_FILE,
 
-        # Анти-детект
+        # стабильность
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
 
-        # Поведение как браузер
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["web", "android"],
-                "skip": ["dash", "hls"],
-            }
-        },
-
-        # Тайминги
+        # retry
         "retries": 3,
         "fragment_retries": 3,
-        "concurrent_fragment_downloads": 4,
+
+        # ускорение
+        "concurrent_fragment_downloads": 8,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
