@@ -1,79 +1,90 @@
 import os
-import asyncio
 from telegram import Update
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    ContextTypes,
-    filters,
+    ApplicationBuilder, CommandHandler,
+    MessageHandler, ContextTypes,
+    filters, PreCheckoutQueryHandler
 )
 
-from config import BOT_TOKEN, ADMIN_IDS
+from config import BOT_TOKEN, ADMIN_IDS, CHANNEL_USERNAME
 from downloader import download_video
+from access import has_access
+from payments import stars_invoice
+from database import set_paid, add_stat, total_downloads
 
-
-def is_admin(update: Update) -> bool:
-    return update.effective_user.id in ADMIN_IDS
-
-
-# ---------- COMMANDS ----------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "👋 Пришли ссылку на видео.\n"
-        "Я скачаю и пришлю файл."
+        "👋 Пришли ссылку на видео.\n\n"
+        "🔒 Бесплатно — подпишись на канал\n"
+        f"{CHANNEL_USERNAME}\n\n"
+        "💰 Или купи безлимит навсегда — 299⭐"
     )
+
+
+async def buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_invoice(
+        chat_id=update.effective_chat.id,
+        **stars_invoice()
+    )
+
+
+async def precheckout(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.pre_checkout_query.answer(ok=True)
+
+
+async def successful_payment(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    set_paid(update.effective_user.id)
+    await update.message.reply_text("✅ Безлимит активирован навсегда!")
 
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_admin(update):
+    if update.effective_user.id not in ADMIN_IDS:
         return
 
     await update.message.reply_text(
-        "🛠 Админ-панель\n\n"
-        f"👤 Your ID: {update.effective_user.id}\n"
-        f"📊 Users: (позже)\n"
+        f"📊 Total downloads: {total_downloads()}"
     )
 
 
-# ---------- MAIN HANDLER ----------
-
 async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
-
-    if not text.startswith("http"):
+    if not await has_access(update, context):
+        await update.message.reply_text(
+            "❌ Нет доступа.\n"
+            f"Подпишись на {CHANNEL_USERNAME}\n"
+            "или купи безлимит /buy"
+        )
         return
 
-    msg = await update.message.reply_text("⏳ Скачиваю видео...")
+    msg = await update.message.reply_text("⏳ Скачиваю...")
 
     try:
-        path, title, size, duration = download_video(text)
+        path, title = download_video(update.message.text)
+        await msg.edit_text("📤 Отправляю...")
 
-        await msg.edit_text("📤 Отправляю в Telegram...")
-
-        # 👉 ВСЕГДА отправляем как document
         await update.message.reply_document(
             document=open(path, "rb"),
-            caption=f"🎬 {title}\n📦 {(size / 1024 / 1024):.1f} MB",
+            caption=f"🎬 {title}"
         )
 
+        add_stat(update.effective_user.id)
         os.remove(path)
 
     except Exception as e:
-        await msg.edit_text(f"❌ Ошибка:\n{e}")
+        await msg.edit_text(f"❌ Ошибка: {e}")
 
-
-# ---------- ENTRY ----------
 
 def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("buy", buy))
     app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(PreCheckoutQueryHandler(precheckout))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
 
-    print("✅ Downloader bot started")
+    print("✅ Bot started")
     app.run_polling()
 
 
